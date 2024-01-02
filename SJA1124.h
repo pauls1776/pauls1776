@@ -20,12 +20,12 @@
 #define LPMODE_LOW_PWR                       0b00000001    // Low Power mode
 #define LPMODE_NORMAL                      	 0b00000000    // Normal Mode
 //--------------------------------------------------------------------------------------------
-//  *****************
+//  *********************
 // PLLCFG
 // THe Zonal Controller will use a 1.832Mhz oscillator, therefore,
-//*****************
-// ** PLLCFG = 4
-//*****************
+//*********************
+// ** PLLCFG_ADDR = PLLMULT_20
+//*********************
 // Address  | Bit 7 | Bit  6  | Bit 5  | Bit 4  | Bit 3  | Bit 2  | Bit 1  | Bit 0 |
 //  01h     | ------ reserved------------------| ------------PLLMULT ------------
 //  Default |   1   |    0    |   0    |   0   |     1   |    0   |    1   |    0  |
@@ -44,7 +44,7 @@
 #define PLLMULT_4_8   0x9 // fclk(PLL)in = 6.0 MHz to 8.0 MHz multiplication factor: M = 4.8
 #define PLLMULT_3_9   0xA // fclk(PLL)in = 8.0 MHz to 10.0 MHz multiplicatin factor: M = 3.9
 
-//  *****************
+//--------------------------------------------------------------------------------------------
 // INT 1  Enable Control Register
 // Address  Bit 7 | Bit 6  | Bit 5  | Bit 4  | Bit 3  | Bit 2  | Bit 1  | Bit 0  |
 //  02h     | ---------reserved---------------| L4WUIE | L3WUIE | L2WUIE | L1WUIE |
@@ -60,7 +60,7 @@
 #define L1WUIE_ON     0x1 // LIN 1 wake-up interrupt enable
 #define L1WUIE_OFF    0x0 // LIN 1 wake-up interrupt disable
 
-//  *****************
+//--------------------------------------------------------------------------------------------
 // INT 2 Enable Control Register
 // Address  | Bit 7 | Bit  6  | Bit 5  | Bit 4  | Bit 3  | Bit 2  | Bit 1  | Bit 0   |
 //  03h     |----reserved-----| OTWIE  |PLLOLIE |PLLILIE |PLLIFFIE| SPIEIE | reserved|
@@ -79,7 +79,7 @@
 #define SPIEIE_ON     0b00000010 // SPI error interrupt enable
 #define SPIEIE_OFF           0x0 // SPI error interrupt disable
 
-//  *****************
+//--------------------------------------------------------------------------------------------
 //Interrupt register 3 (INT 3) provides LIN commander controller status information.
 //When set, LxEI bits indicate that a LIN error status interrupt has been generated (if
 //enabled; see Section 6.10.7.2) and can be identified via the respective LES register (see
@@ -103,9 +103,7 @@
 #define L3SIE_EN      0b00000100    // LIN 3 controller status interrupt enable
 #define L2SIE_EN      0b00000010    // LIN 2 controller status interrupt enable
 #define L1SIE_EN      0b00000001    // LIN 1 controller status interrupt enable
-//------------------------------------------------------------
-// System status registers
-//------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 
 // INT1 Status Register
 // Address  | Bit 7 | Bit  6  | Bit 5  | Bit 4  | Bit 3  | Bit 2  | Bit 1 | Bit 0 |
@@ -117,7 +115,7 @@
 #define L3WUI_MASK       0b00000100  // LIN 3 wake-up interrupt status mask
 #define L2WUI_MASK       0b00000010  // LIN 2 wake-up interrupt status mask
 #define L1WUI_MASK       0b00000001  // LIN 1 wake-up interrupt status mask
-
+//--------------------------------------------------------------------------------------------
 // INT2 Status Register
 // Interrupt status bits are cleared by writing 1; writing 0 has no effect.
 // Address  | Bit 7 | Bit  6  | Bit 5 | Bit 4 | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
@@ -132,7 +130,7 @@
 #define L1WUI_MASK     0b00000100  // PLL input frequency fail interrupt status
 #define SPIEI_MASK     0b00000010  // SPI error interrupt status
 #define LPRFI_MASK     0b00000001  // low power request fail interrupt
-
+//--------------------------------------------------------------------------------------------
 // INT3EN Status Register
 // Interrupts are cleared by writing 1 to the associated LES or LS register.
 // Address  | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
@@ -149,7 +147,7 @@
 #define L3SIE_MASK      0b00000100 // LIN 3 controller status interrupt
 #define L2SIE_MASK      0b00000010 // LIN 2 controller status interrupt
 #define L1SIE_MASK      0b00000001 // LIN 1 controller status interrupt
-
+//--------------------------------------------------------------------------------------------
 // STATUS Register (Read only)
 // Address  | Bit 7 | Bit 6   | Bit 5 | Bit 4   | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
 //  13h     |----reserved-----|  OTW  |reserved | PLLIL | PLLIFF| -- reserved --|
@@ -166,7 +164,7 @@
 #define PLL_INPUT_FREQ_OK   0x0         // PLL input frequency ok (within defined range)
 
 
-//------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 // LIN communication  registers	LCOM1
 // LIN high-speed mode can be enabled to support baud rates higher than 20 kBd (see
 // section Section 6.2.3.4) via bits LxHS in the LIN commander controller communication
@@ -203,13 +201,17 @@
 #define LIN3_TRANS_FRM_EN      0b00000100    // LIN 3 transmit frame input (TMF) enable
 #define LIN2_TRANS_FRM_EN      0b00000010    // LIN 2 transmit frame input (TMF) enable
 #define LIN1_TRANS_FRM_EN      0b00000001    // LIN 1 transmit frame input (TMF) enable
-//------------------------------------------------------------
 
+//--------------------------------------------------------------------------------------------
 //LIN communication  register 2
 // Bits LxHTRQ in table LCOM2 are used to initiate LIN header transmission.
 // Address | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2  | Bit 1  | Bit 0  |
 //  21h    | ---------reserved-------------| L4HTRQ | L3HTRQ | L2HTRQ | L1HTRQ |
 //  Default| ---------reserved-------------|    0   |    0   |    0   |    0   |
+// ************************************
+// set LCOM2_ADDR = LIN1_HEADER_TRANS_REQ
+// **********************************
+
 #define LCOM2_ADDR   0x21
 #define LIN4_HEADER_TRANS_REQ  0b00001000    // LIN 4 header transmission request
 #define LIN3_HEADER_TRANS_REQ  0b00000100    // LIN 3 header transmission request
@@ -223,15 +225,13 @@
 // LIN configuration registers 1
 // LIN configuration register 1 (LCFG1) is used to select the operating mode, configure the
 // LIN commander break length and to enable/disable the hardware checksum.
-// ********************
-// set LCFG1 = HW_CHK_SUM_ENABLE + LCFG1_MBL_10BITS +  LIN_NORMAL_MODE + LIN_INIT_MODE = 0x02
-// ********************
 // Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2    | Bit 1  | Bit 0  |
 //  30h 60h 90h C0h | CCD   | ---------------MBL ------------| reserved | SLEEP  | INIT   |
 //  Default         |   0   |    0  |   0   |   0   |    0   |    0     |    1   |    0   |
+// ************************************
+// set LCFG1 = HW_CHK_SUM_ENABLE + LCFG1_MBL_10BITS +  LIN_NORMAL_MODE + LIN_INIT_MODE = 0x02
+// **********************************
 
-//******************
-// 
 #define LIN1_LCFG1       0x30
 #define LIN2_LCFG1       0x60
 #define LIN3_LCFG1       0x90
@@ -352,10 +352,6 @@
 //The output frequency of the baud rate generator is 16 times the baud rate. The input
 //frequency of the baud rate generator is the PLL output clock frequency fclk(PLL)out.
 //The baud rate can be calculated from the following formula:
-//
-// baudrate = Fclk(PLLOUT) / (16 * IBR) + FBR)  = 65 * 500000/ ((16 * IBR) + FBR)) = 20000
-//                                              = 32500000 /20000 = (16 * IBR) + FBR = 1625 /16 = IBR + FBR/16 = 101.56  ||
-//                                               IBR = 101 = 0x65 || FBR = 3.5 = 4
 // The baud rate deviation (ΔBR) from the nominal baud rate (BRnom) depends on the PLL
 // output clock frequency and the nominal baud rate. The baud rate deviation (ΔBR) can be
 // calculated from the nominal baud rate (BRnom) using the following equation
@@ -363,6 +359,14 @@
 // Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2    | Bit 1  |  Bit 0 |
 // 35h 65h 95h C5h  |  -------------------reserved--| ---------------FBR ---------------  |
 // Default          |   0   |    0  |   0   |   0   |   1  |   1    |   1    |    0   |
+// ********************************************************************
+// baudrate = Fclk(PLLOUT) / (16 * IBR) + FBR)  = 65 * 500000/ ((16 * IBR) + FBR)) = 20000
+//                                              = 32500000 /20000 = (16 * IBR) + FBR = 1625 /16 = IBR + FBR/16 = 101.56  ||
+//                                               IBR = 101 = 0x65
+//                                               LIN1_BAUD_RATE_MSB_B1 (LBRM) = 0x00
+//                                               LIN1_BAUD_RATE_MSB_B0 (LBRL) = 0x65
+//                                               LIN1_BAUD_FRACTION (FBR) = 3.5 = 4
+// ********************************************************************
 
 #define LIN1_BAUD_FRACTION       0x35
 #define LIN2_BAUD_FRACTION       0x65
@@ -371,18 +375,20 @@
 #define LCFG2_FRCTION_BAUD_RATE_MASK    0x0F  // fractional baud rate
 //------------------------------------------------------------
 
-// LIN baud rate generator MSB register
-// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2    | Bit 1  |  Bit 0 |
-// 36h 66h 96h C6h  |  --------------------------IBR[15:7]------------------------------  |
+// LIN baud rate generator LBRM register
+// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 |  Bit 0 |
+// 36h 66h 96h C6h  |  --------------------------IBR[15:7]--------------------------  |
+// Default          |   0   |    0  |   0   |   0   |   0   |   0    |   0   |    0   |
 #define LIN1_BAUD_RATE_MSB_B1      0x36
 #define LIN2_BAUD_RATE_MSB_B1      0x66
 #define LIN3_BAUD_RATE_MSB_B1      0x96
 #define LIN4_BAUD_RATE_MSB_B1      0xC6
 //------------------------------------------------------------
 
-// LIN baud rate generator MSB register
-// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2    | Bit 1  |  Bit 0 |
-// 37h 67h 97h C7h  |  --------------------------IBR[7:0]-------------------------------  |
+// LIN baud rate generator LBRL  MSB register
+// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2  | Bit 1 |  Bit 0 |
+// 37h 67h 97h C7h  |  --------------------------IBR[7:0]---------------------------- |
+// Default          |   0   |    0  |   0   |   0   |   0   |   0    |   0   |    0   |
 #define LIN1_BAUD_RATE_MSB_B0      0x37
 #define LIN2_BAUD_RATE_MSB_B0      0x67
 #define LIN3_BAUD_RATE_MSB_B0      0x97
@@ -396,6 +402,7 @@
 // register (LES) and LIN status register (LS).
 // Address           | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3    | Bit 2 | Bit 1 | Bit 0  |
 //   38h 68h 98h C8h | SZIE  | TOIE  | BEIE  | CEIE  | reserved | DRIE  | DTIE  | FEIE   |
+//    Default        |   0   |    0  |   0   |   0   |   0      |   0   |   0   |    0   |
 
 #define LIN1_INTR_EN   0x38
 #define LIN2_INTR_EN   0x68
@@ -412,29 +419,62 @@
 #define FEIE_EN      0b00000001  // frame error interrupt enable; generated when FEF flag in LES register (Table 42; bit 0) is set
 //------------------------------------------------------------
 
-// LIN control registers
+// LIN control registers (LC)
 // A wake-up request is generated by writing the wake-up character to LIN buffer data
 // register 1 (LBD1; see Section 6.10.6.5) and setting bit WURQ to 1. The data written to
 // LBDx is transmitted when WURQ is set. The current LIN frame transmission can be
 // aborted by setting bit ARBQ. A LIN header transmission is initiated by setting bit HTRQ.
 // If bit DIR in register LBC is set (see Table 38), the LIN frame response transmission
 // follows automatically.
-// Address           | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
+// Address   LC      | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
 //   39h 69h 99h C9h | ------- reserved -----| WURQ  | --reserved --- | ABRQ  | HTRQ   |
-
+//    Default        |   0   |    0  |   0   |   0   |   0      |  0  |   0   |    0   |
+// **************************
+// LIN1_INTR_EN = WAKE_UP_REQ + HEADER_RX_REQ
+// **************************
 #define LIN1_INTR_EN   0x39
 #define LIN2_INTR_EN   0x69
 #define LIN3_INTR_EN   0x99
 #define LIN4_INTR_EN   0xC9
 
+#define WAKE_UP_REQ    0b00010000  // abort the current transmission or wake-up; aborts at the end of current bit
 #define ABORT_TX_WAKE  0b00000010  // abort the current transmission or wake-up; aborts at the end of current bit
 #define HEADER_RX_REQ  0b00000001  // Generate LIN header transmission
-//------------------------------------------------------------
 
+//------------------------------------------------------------
+// LIN buffer identifier registers
+// The LIN buffer identifier registers contain the LIN frame identifiers.
+//  Address  LSTATE     | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
+//   3Ah, 6Ah, 9Ah, CAh | --- reserved- |----------------- ID --------------- ------------|
+//***************************
+//  LIN1_ID = 0b00101010
+//***************************
+#define LIN1_ID   0x3A
+#define LIN2_ID   0x6A
+#define LIN3_ID   0x9A
+#define LIN4_ID   0xCA
+
+//------------------------------------------------------------
+// LIN buffer identifier registers
+// The LIN buffer control registers are used to configure the LIN checksum version (classic
+// or enhanced), the LIN message response direction (from commander to responder or
+// vice versa) and the data field length (number of data bytes to be transferred).
+//  Address  LSTATE     | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
+//   3Bh, 6Bh, 9Bh, CBh | ------ reserved------ |--------DFL ------------|  DIR  |  CCS   |
+//***************************
+//  LIN1_BUF_CTRL = 0b0001111
+//***************************
+
+#define LIN1_BUF_CTRL   0x3B
+#define LIN2_BUF_CTRL   0x6B
+#define LIN3_BUF_CTRL   0x9B
+#define LIN4_BUF_CTRL   0xCB
+
+
+//------------------------------------------------------------
 // LIN State registers
-//  Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3    | Bit 2 | Bit 1 | Bit 0  |
+//  Address  LSTATE  | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3    | Bit 2 | Bit 1 | Bit 0  |
 //   4Fh 7Fh AFh DFh | RXBSY | ------- reserved----- |----------------- LINS ------------|
-			// LSTATE RXBSY reserved LINS
 
 #define LIN1_LSTATE   0x4F
 #define LIN2_LSTATE   0x7F
@@ -516,7 +556,7 @@ uint8 LIN4_State;
 #define FIRST_BYTE_RX     	   	  1
 #define DATA_RX_CMP_MASK  	   	  0b00000100 // data reception complete flag
 #define DATA_RX_CMP       	   	  1
-#define DATA_TX_CMP_MASK  	   	  0b00000010 // data reception complete flag
+#define DATA_TX_CMP_MASK  	   	  0b00000010 // data transmission complete flag
 #define DATA_TX_CMP               1
 //-------------------------------------------------------------------------------------------------
 
@@ -559,6 +599,26 @@ uint8 LIN4_State;
 //  58h 88h B8h E8h LBD6 | -----------------------------DATA5----------------------------------|
 //  59h 89h B9h E9h LBD7 | -----------------------------DATA6----------------------------------|
 //  5Ah 8Ah BAh EAh LBD8 | -----------------------------DATA7----------------------------------|
+// A LIN frame transmission is initiated by setting the LIN header transmission request bit
+// (HTRQ) in the LIN control register (LC; Table 36). On receiving a header transmission
+// request, the LIN commander controller transmits a LIN frame header, which includes
+// break, sync and protected identifier fields. Depending on the state of the data direction
+// bit (DIR) in the LIN buffer control register (LBC; Table 38), the LIN commander controller
+// either transmits the LIN frame response (DIR = 1: LIN commander transmits, LIN
+// responder receives) or expects to receive the LIN frame response from a LIN responder
+// (DIR = 0: LIN responder transmits; LIN commander receives).
+// When the LIN commander controller transmits the LIN frame response, the data fields
+// stored in the LIN buffer data registers (LBDx; see Table 40) are transmitted automatically.
+// The data field length (DFL) to be transmitted is configured in the LBC register. Finally, the
+// checksum is transmitted. Depending on the CCD bit in the LIN configuration 1 register
+// (LCFG1; Table 27), the checksum is either hardware-generated or needs to be stored in
+// the LIN checksum field register (LCF; Table 39) by the user. If the checksum is generated
+// automatically, the checksum type (enhanced or classic) can be configured via the CCS
+// bit in the LBC register.
+// Once LIN header transmission begins, the user should not modify register bits in the LIN
+// buffer identifier (LBI; Table 37) and LIN buffer control (LBC; Table 38) registers until the
+// frame transmission has been completed. The transmitted LIN frame identifier and data
+// are also received by the LIN commander controller and copied, respectively, to LBI and LBDx.
 
 uint8 LIN1_Data_Frame[8];
 uint8 LIN2_Data_Frame[8];
