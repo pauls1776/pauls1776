@@ -7,7 +7,7 @@
 //--------------------------------------------------------------------------------------------
 // Low Power mode
 //*******************
-// ** set MODE = 0x80
+// ** set MODE = RESET_CNTRLER + LPMODE_NORMAL
 //********************
 // The mode register (MODE) is used to reset the SJA1124 and to select Low Power mode.
 // Operating modes are described in Section 6.2.
@@ -24,7 +24,7 @@
 // PLLCFG
 // THe Zonal Controller will use a 1.832Mhz oscillator, therefore,
 //*********************
-// ** PLLCFG_ADDR = PLLMULT_20
+// ** PLLCFG_ADDR 0x1 = PLLMULT_20 = 0x4
 //*********************
 // Address  | Bit 7 | Bit  6  | Bit 5  | Bit 4  | Bit 3  | Bit 2  | Bit 1  | Bit 0 |
 //  01h     | ------ reserved------------------| ------------PLLMULT ------------
@@ -229,7 +229,7 @@
 //  30h 60h 90h C0h | CCD   | ---------------MBL ------------| reserved | SLEEP  | INIT   |
 //  Default         |   0   |    0  |   0   |   0   |    0   |    0     |    1   |    0   |
 // ************************************
-// set LCFG1 = HW_CHK_SUM_ENABLE + LCFG1_MBL_10BITS +  LIN_NORMAL_MODE + LIN_INIT_MODE = 0x02
+// set LIN1_LCFG1 0x30 = HW_CHK_SUM_ENABLE + LCFG1_MBL_10BITS +  LIN_NORMAL_MODE + LIN_INIT_MODE = 0x01
 // **********************************
 
 #define LIN1_LCFG1       0x30
@@ -328,7 +328,7 @@
 // The timer starts at the end of the LIN frame header (i.e. at the end of the stop bit of the
 // protected identifier field).
 //     Tresponse_max = RTO x (DFL + 2) x Tbit = RTO/10 x Tresponse_min
-// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 |  Bit 0 |
+// Address  LRTC    | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 |  Bit 0 |
 // 34h 64h 94h C4h  |  -------------------reserved--| ---------------RTO -----------  |
 // Default          |   0   |    0  |   0   |   0   |   1  |   1    |   1    |    0   |
 // ************************
@@ -356,16 +356,17 @@
 // output clock frequency and the nominal baud rate. The baud rate deviation (ΔBR) can be
 // calculated from the nominal baud rate (BRnom) using the following equation
 // LIN fractional register
-// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2    | Bit 1  |  Bit 0 |
-// 35h 65h 95h C5h  |  -------------------reserved--| ---------------FBR ---------------  |
-// Default          |   0   |    0  |   0   |   0   |   1  |   1    |   1    |    0   |
+// Address          | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2  | Bit 1  |  Bit 0 |
+// 35h 65h 95h C5h  |  -------------------reserved--| ---------------FBR ------------  |
+// Default          |   0   |    0  |   0   |   0   |   1   |   1    |   1    |    0   |
 // ********************************************************************
-// baudrate = Fclk(PLLOUT) / (16 * IBR) + FBR)  = 65 * 500000/ ((16 * IBR) + FBR)) = 20000
-//                                              = 32500000 /20000 = (16 * IBR) + FBR = 1625 /16 = IBR + FBR/16 = 101.56  ||
-//                                               IBR = 101 = 0x65
+// baudrate = Fclk(PLLOUT) / (16 * IBR) + FBR)  = 20 * 1832000 = 36,640,000/ ((16 * IBR) + FBR)) = 20000
+//                                              = 36,640,000 /20000 = 1832 = (16 * IBR) + FBR 
+//                                               = 1832/16 = 114.5 = IBR + FBR/16
+//                                               IBR = 114 = 0x72
 //                                               LIN1_BAUD_RATE_MSB_B1 (LBRM) = 0x00
 //                                               LIN1_BAUD_RATE_MSB_B0 (LBRL) = 0x65
-//                                               LIN1_BAUD_FRACTION (FBR) = 3.5 = 4
+//                                               LIN1_BAUD_FRACTION (FBR/16) = 3 or FBR = 50 = 0x32
 // ********************************************************************
 
 #define LIN1_BAUD_FRACTION       0x35
@@ -430,16 +431,17 @@
 //   39h 69h 99h C9h | ------- reserved -----| WURQ  | --reserved --- | ABRQ  | HTRQ   |
 //    Default        |   0   |    0  |   0   |   0   |   0      |  0  |   0   |    0   |
 // **************************
-// LIN1_INTR_EN = WAKE_UP_REQ + HEADER_RX_REQ
+// LIN1_CNTRL = WAKE_UP_REQ + HEADER_RX_REQ = 0x11
 // **************************
-#define LIN1_INTR_EN   0x39
-#define LIN2_INTR_EN   0x69
-#define LIN3_INTR_EN   0x99
-#define LIN4_INTR_EN   0xC9
+#define LIN1_CNTRL   0x39
+#define LIN2_CNTRL   0x69
+#define LIN3_CNTRL   0x99
+#define LIN4_CNTRL   0xC9
 
 #define WAKE_UP_REQ    0b00010000  // abort the current transmission or wake-up; aborts at the end of current bit
 #define ABORT_TX_WAKE  0b00000010  // abort the current transmission or wake-up; aborts at the end of current bit
-#define HEADER_RX_REQ  0b00000001  // Generate LIN header transmission
+#define HEADER_TX_REQ  0b00000001  // Generate LIN header transmission
+#define NO_HEADER_TX   0b00000000  // No LIN header transmission
 
 //------------------------------------------------------------
 // LIN buffer identifier registers
@@ -447,7 +449,7 @@
 //  Address  LSTATE     | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
 //   3Ah, 6Ah, 9Ah, CAh | --- reserved- |----------------- ID --------------- ------------|
 //***************************
-//  LIN1_ID = 0b00101010
+//  LIN1_ID 0x3A = 0b00101010 
 //***************************
 #define LIN1_ID   0x3A
 #define LIN2_ID   0x6A
@@ -459,10 +461,10 @@
 // The LIN buffer control registers are used to configure the LIN checksum version (classic
 // or enhanced), the LIN message response direction (from commander to responder or
 // vice versa) and the data field length (number of data bytes to be transferred).
-//  Address  LSTATE     | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
+//  Address   LBC       | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
 //   3Bh, 6Bh, 9Bh, CBh | ------ reserved------ |--------DFL ------------|  DIR  |  CCS   |
 //***************************
-//  LIN1_BUF_CTRL = 0b0001111
+//  LIN1_BUF_CTRL = (EightBtyes << 2)  + (DIR_MASTER_TX << 1) + CHK_SUM_CLASSIC =   0b00011111
 //***************************
 
 #define LIN1_BUF_CTRL   0x3B
@@ -470,6 +472,19 @@
 #define LIN3_BUF_CTRL   0x9B
 #define LIN4_BUF_CTRL   0xCB
 
+#define EightBtyes      (8-1)
+#define SevenBtyes      (7-1)
+#define SixBtyes        (6-1)
+#define FiveBtyes       (5-1)
+#define FourBtyes       (4-1)
+#define ThreeBtyes      (3-1)
+#define TwoBtyes        (2-1)
+#define OneBtyes        (1-1)
+
+#define DIR_MASTER_TX    1
+#define DIR_MASTER_RX    0
+#define CHK_SUM_CLASSIC  1
+#define CHK_SUM_ENANCED  0
 
 //------------------------------------------------------------
 // LIN State registers
@@ -492,15 +507,15 @@ uint8 LIN3_State;
 uint8 LIN4_State;
 
 #define SLEEP         0x00       // Sleep Mode
-#define INIT          0x01       // receiver busy flag
-#define IDLE          0x02       // receiver busy flag
-#define SYNC_BRK_TX   0x03       // receiver busy flag
-#define SYNC_DELIM_TX 0x04       // receiver busy flag
-#define SYNC_FIELD_TX 0x05       // receiver busy flag
-#define ID_TX         0x06       // receiver busy flag
-#define HEADER_TX     0x07       // receiver busy flag
-#define RX_ONGOING    0x08       // receiver busy flag
-#define CHECKSUM_TXRX 0x09       // receiver busy flag
+#define INIT          0x01       // LIN channel in LIN Initialization mode
+#define IDLE          0x02       // LIN idle mode
+#define SYNC_BRK_TX   0x03       // sync break transmission ongoing
+#define SYNC_DELIM_TX 0x04       // sync break transmission has been completed and sync delimiter transmission is ongoing
+#define SYNC_FIELD_TX 0x05       // sync field transmission ongoing
+#define ID_TX         0x06       // identifier transmission ongoing
+#define HEADER_TX     0x07       // header transmitted
+#define RX_ONGOING    0x08       // response reception ongoing in receiver mode or response transmission ongoing in transmitter mode
+#define CHECKSUM_TXRX 0x09       // data transmission/reception completed, checksum transmission/reception ongoing
 //------------------------------------------------------------
 
 
@@ -619,7 +634,8 @@ uint8 LIN4_State;
 // buffer identifier (LBI; Table 37) and LIN buffer control (LBC; Table 38) registers until the
 // frame transmission has been completed. The transmitted LIN frame identifier and data
 // are also received by the LIN commander controller and copied, respectively, to LBI and LBDx.
-
+// *************************************
+// LIN1_LBD1	  0x53 = 0xAA 0xAA 0xAA 0xAA 0xAA 0xAA 0xAA 0xAA  DLC = EIghtBytes
 uint8 LIN1_Data_Frame[8];
 uint8 LIN2_Data_Frame[8];
 uint8 LIN3_Data_Frame[8];
