@@ -1,0 +1,461 @@
+// This File contains the interface methods for the SJA1124 LIN Quad SPI based transceiver
+// THe device has 4 independant LIN Channels and requires a seperate Oscillator to provide
+// a system clock for the development of a PLL that is used
+// The SJA1124 is a quad Local Interconnect Network (LIN) commander channel device.
+// Each of the four channels contains a LIN commander controller and LIN transceiver with
+// commander termination. LIN commander frames are transferred to the physical LIN bus
+// via the LIN physical layer. The SJA1124 is primarily intended for in-vehicle subnetworks
+// using baud rates up to 20 kBd and is compliant with LIN 2.0, LIN 2.1, LIN 2.2, LIN 2.2A,
+// ISO 17987-4:2016 (12 V LIN) and SAE J2602-1. It is available in two variants, SJA1124A
+// and SJA1124B; see Section 3 for details.
+// A Serial Peripheral Interface (SPI) and an interrupt output provide the interface between
+// the SJA1124 and a microcontroller.
+// Transmit data streams received on the SPI are converted by the SJA1124 into LIN
+// commander frames transmitted on the LIN bus. The LIN commander frames are
+// transmitted as optimized bus signals shaped to minimize ElectroMagnetic Emission
+// (EME). The LIN bus output pins are pulled HIGH via internal LIN commander termination
+// resistors. Data streams received on the LIN bus input pins can be read by the
+// microcontroller via the SPI.
+// Power consumption is very low in Low Power mode. However, the SJA1124 can still be
+// woken up via the LIN pins and the SPI interface.
+//
+
+#include "SJA1124.h"
+#include "device_registers.h"	  /* include peripheral declarations */
+#include <stdint.h>
+#include <stddef.h>
+#include "S32K146.h"
+
+#define LENGHT_OF_FRAME 8
+
+uint8_t Write_Read_1124_Reg(uint8_t Reg_Addr, uint8_t WriteData );
+void delay(uint32_t delaycount) {
+	uint32_t count;
+	do {
+		count = count +1;
+	}while  (count <= delaycount);
+}
+uint8_t Write_Read_1124_Reg(uint8_t Reg_Addr, uint8_t WriteData )
+{
+    uint8_t status;
+    uint8_t rw_dlc_byte;
+    uint8_t Reg_data; 
+
+    // Write the Reg with the intended data
+    LPSPI0->SR |= LPSPI_SR_TCF_MASK; /* Clear TDF flag 				*/
+
+//    rw_dlc_byte = READ_WRITE_CNTRL(WRITE_REG) | DATA_LEN_CNTRL(1 -1);
+    rw_dlc_byte = WRITE_REG | DATA_LEN_CNTRL(1 -1);
+
+    LPSPI0_transmit_8bits(Reg_Addr);
+    LPSPI0_transmit_8bits(rw_dlc_byte);
+    LPSPI0_transmit_8bits(WriteData);
+
+    // Read the Reg with the blank data to keep the Chipselect on
+    rw_dlc_byte = READ_REG | DATA_LEN_CNTRL(1 -1);
+    delay(4000);
+    LPSPI0_transmit_8bits(Reg_Addr);
+    LPSPI0_transmit_8bits(rw_dlc_byte);
+    //Reg_data = LPSPI0_transmit_8bits(READ_REG_EMPTY_BYTE);
+    Reg_data = LPSPI0_receive_8bits();
+
+    // Get the Register Data
+    // Reg_data = LPSPI0_receive_8bits();
+    return(Reg_data);
+}
+void Write_1124_Reg(uint8_t Reg_Addr, uint8_t WriteData )
+{
+    uint8_t status;
+    uint8_t rw_dlc_byte;
+    uint8_t Reg_data; 
+
+    // Write the Reg with the intended data
+    
+    LPSPI0_transmit_8bits(Reg_Addr);
+//    rw_dlc_byte = READ_WRITE_CNTRL(WRITE_REG) | DATA_LEN_CNTRL(1 -1);
+    rw_dlc_byte = WRITE_REG | DATA_LEN_CNTRL(1 -1);
+
+    LPSPI0_transmit_8bits(rw_dlc_byte);
+    LPSPI0_transmit_8bits(WriteData);
+}
+uint8_t Read_1124_Reg(uint8_t Reg_Addr)
+{
+    uint8_t status;
+    uint8_t rw_dlc_byte;
+    uint8_t Reg_data; 
+
+    // Read the Reg with the blank data to keep the Chip select on
+ //   rw_dlc_byte = READ_WRITE_CNTRL(READ_REG) | DATA_LEN_CNTRL(1 -1);
+    rw_dlc_byte = READ_REG | DATA_LEN_CNTRL(1 -1);
+
+    LPSPI0_transmit_8bits(Reg_Addr);
+    LPSPI0_transmit_8bits(rw_dlc_byte);
+    LPSPI0->SR |= LPSPI_SR_RDF_MASK; /* Clear RDF flag 					*/
+    Reg_data = LPSPI0_transmit_8bits(READ_REG_EMPTY_BYTE);
+ //   Reg_data = LPSPI0_receive_8bits();
+    // Get the Register Data
+    // Reg_data = LPSPI0_receive_8bits();
+    return(Reg_data);
+}
+
+void init_LIN_1124_Transceiver(void)
+{
+#define WRITE_ERROR   0xFF
+
+    uint8_t write_data; 
+    uint8_t response;
+    uint8_t init_status;
+
+    // **********************************************************************************************************
+    // Clear the Initialization Flag and enable Wakeup interrupts for all 4 LIN modules
+    write_data = INITI_MASK | L4WUI_MASK | L3WUI_MASK | L2WUI_MASK | L1WUI_MASK;
+    response = L4WUI_MASK;
+    response = Write_Read_1124_Reg((uint8_t) LIN_INT1_STATUS_REG, write_data);
+    response = Read_1124_Reg(0XFF);
+    if (response != write_data)
+    { 
+        // set error flag here
+        init_status = WRITE_ERROR;
+    }
+
+    // **********************************************************************************************************
+    // Write CFG Reg  set to initialization state  MBL= 10Bits
+    write_data = HW_CHK_SUM_ENABLE + CFG1_BREAK_LEN_10BITS + LIN_INIT_MODE;
+
+    response = Write_Read_1124_Reg((uint8_t) LIN1_CFG_REG_1, write_data);
+
+    write_data = HW_CHK_SUM_ENABLE | CFG1_BREAK_LEN_20BITS | LIN_INIT_MODE;
+    response = Write_Read_1124_Reg((uint8_t) LIN1_CFG_REG_1, write_data);
+  //  response = Write_Read_1124_Reg((uint8_t) LIN2_CFG_REG_1, write_data);
+  //  response = Write_Read_1124_Reg((uint8_t) LIN3_CFG_REG_1, write_data);
+  //  response = Write_Read_1124_Reg((uint8_t) LIN4_CFG_REG_1, write_data);
+
+    // **********************************************************************************************************
+    // WriteBaudRate set baud rate to 20k
+    // baudrate = Fclk(PLLOUT) / (16 * IBR) + FBR)  = 20 * 1832000 = 36,640,000/ ((16 * IBR) + FBR)) = 2
+    //                                              = 36,640,000 /20000 = 1832 = (16 * IBR) + FBR
+    //                                               = 1832/16 = 114.5 = IBR + FBR/16
+    //                                               IBR = 114 = 0x72
+    //                                               LIN1_BAUD_RATE_MSB_B1 (LBRM) = 0x00
+    //                                               LIN1_BAUD_RATE_MSB_B0 (LBRL) = 0x72
+    //                                               LIN1_BAUD_FRACTION (FBR/16) = 3 or FBR = 50 = 0x32
+    write_data = 0x3;
+    response = Write_Read_1124_Reg((uint8_t) LIN1_BAUD_FRACTION, write_data);
+  //  response = Write_Read_1124_Reg((uint8_t) LIN2_BAUD_FRACTION, write_data);
+    //  response = Write_Read_1124_Reg((uint8_t) LIN3_BAUD_FRACTION, write_data);
+    // response = Write_Read_1124_Reg((uint8_t) LIN4_BAUD_FRACTION, write_data);
+
+    write_data = 0x00;
+    response = Write_Read_1124_Reg((uint8_t) LIN1_BAUD_RATE_MSB, write_data);
+    //response = Write_Read_1124_Reg((uint8_t) LIN2_BAUD_RATE_MSB, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN3_BAUD_RATE_MSB, write_data);
+    //response = Write_Read_1124_Reg((uint8_t) LIN4_BAUD_RATE_MSB, write_data);
+
+    write_data = 0x72;
+    response = Write_Read_1124_Reg((uint8_t) LIN1_BAUD_RATE_LSB, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN2_BAUD_RATE_LSB, write_data);
+    //  response = Write_Read_1124_Reg((uint8_t) LIN3_BAUD_RATE_LSB, write_data);
+    // response = Write_Read_1124_Reg((uint8_t) LIN4_BAUD_RATE_LSB, write_data);
+
+    // **********************************************************************************************************
+    write_data = HW_CHK_SUM_ENABLE | CFG1_BREAK_LEN_20BITS | LIN_NORMAL_MODE ;
+
+    response = Write_Read_1124_Reg((uint8_t) LIN1_CFG_REG_1 , write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN2_CFG_REG_1, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN3_CFG_REG_1 , write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN4_CFG_REG_1 , write_data);
+
+    // **********************************************************************************************************
+    // Write PLL CFG set for 1.832 Mhz Oscillator in Normal mode
+    response = Write_Read_1124_Reg( (uint8_t) (PLL_CFG_REG), (uint8_t) (PLLMULT_1400_1900k));
+
+    // Write LIN1 RTC - Response Timeout set RTO to 14 - it is its default value so this step is not necessary
+    // **********************************************************************************************************
+    // Baud Rate expected = 10,000
+    // Tbit = 1/10000 = 100 usec
+    // Tresponse_max = 14 * 100 usec * ((8 bytes -1) + 2) = 12.6 msec
+    write_data = 0x0E ;
+
+    response = Write_Read_1124_Reg((uint8_t) LIN1_RESPNS_TIMOUT_REG, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN2_RESPNS_TIMOUT_REG, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN3_RESPNS_TIMOUT_REG, write_data);
+    //    response = Write_Read_1124_Reg((uint8_t) LIN4_RESPNS_TIMOUT_REG, write_data);
+
+    // **********************************************************************************************************
+
+
+    write_data = 0x01F;   // LIN ID
+
+    response = Write_Read_1124_Reg((uint8_t) LIN1_RESPNS_TIMOUT_REG, write_data);
+
+// interurpts initilized 
+
+
+}
+void set_LIN_1124_ID(uint8_t channel_num, uint8_t id )
+{
+    switch (channel_num)
+    {
+        case LIN_CHAN_1:
+            Write_1124_Reg((uint8_t) LIN1_ID_REG, id);
+            break;
+        case LIN_CHAN_2:
+            Write_1124_Reg((uint8_t) LIN2_ID_REG, id);
+            break;
+        case LIN_CHAN_3:
+            Write_1124_Reg((uint8_t) LIN3_ID_REG, id);
+            break;
+        case LIN_CHAN_4:
+            Write_1124_Reg((uint8_t) LIN4_ID_REG, id);
+            break;
+        default:
+           // error
+            break;
+    }
+
+
+}
+uint8_t LIN1_Data_Frame[LENGHT_OF_FRAME];
+uint8_t LIN2_Data_Frame[LENGHT_OF_FRAME];
+uint8_t LIN3_Data_Frame[LENGHT_OF_FRAME];
+uint8_t LIN4_Data_Frame[LENGHT_OF_FRAME];
+//***************************************************************************************
+// LIN_1124_SendUnconditionalFrameHeader - sends a Header followed by the number of bytes 
+// indicated by num_of_bytes.
+// If the Slave is to response then the data_frame must be set to 0x00 fpr the appropriate number of bytes 
+// in this way the SPI Chip select will stay on and the response data from the slave can be received. 
+// If the Master is to response then the data_frame must be set to desire data byte values for transmission to the slave.
+// data_frame.
+// For a Slave Tx, the static array response will have the data. The caller ignores the response data for Master TX or for facilitating 
+// a frame from Slave to Slave.
+
+
+//extern  uint8_t response[LENGHT_OF_FRAME];
+static  uint8_t response[LENGHT_OF_FRAME];
+#define MASTER_TX 1
+#define INST_LPSPI_1  0U
+
+void LIN_1124_TxRxUnconditionalFrameHeader(bool tx_direction, uint8_t channel_num,uint8_t num_of_bytes,  uint8_t chksum_type, uint8_t * data_frame)
+{
+    uint8_t write_data, i;
+    if ( tx_direction == DIR_MASTER_TX)
+      write_data = ( (num_of_bytes-1) << 2)  + (DIR_MASTER_TX << 1) + chksum_type;
+    else
+      write_data = ( (num_of_bytes-1) << 2)  + (DIR_SLAVE_TX  << 1) + chksum_type;
+
+    switch (channel_num)
+    {
+        case LIN_CHAN_1: 
+        	// Initialize LIN Buffer with data
+            Write_1124_Reg((uint8_t) LIN1_BUF_CTRL_REG, write_data);
+            for (i = 0; i < num_of_bytes; i++)
+            {
+             Write_1124_Reg((uint8_t) LIN1_BUF_DAT_REG_1+i , data_frame[i]);
+            }
+            Write_1124_Reg((uint8_t) LIN_COM_REG_2, LIN1_HEADER_TRANS_REQ);
+            for (i = 0; i < num_of_bytes; i++)
+            {
+             /* Wait at least one RxFIFO entry 	*/
+//             while( (LPSPI_GetStatusFlag(LPSPI0, LPSPI_MODULE_BUSY)));
+             while((LPSPI0->SR & LPSPI_SR_MBF_MASK)>>LPSPI_SR_MBF_SHIFT==0);
+//             while((LPSPI0->SR & LPSPI_SR_RDF_MASK)>>LPSPI_SR_RDF_SHIFT==0);
+             response[i] = LPSPI0->RDR;            /* Read received data 				*/
+             LPSPI0->SR |= LPSPI_SR_RDF_MASK;      /* Clear RDF flag 					*/
+            }
+            break;
+        case LIN_CHAN_2:
+        	// Initialize LIN Buffer with data
+            Write_1124_Reg((uint8_t) LIN2_BUF_CTRL_REG, write_data);
+            for (i = 0; i < num_of_bytes; i++)
+            {
+              Write_1124_Reg((uint8_t) LIN2_BUF_DAT_REG_1+i , data_frame[i]);
+            }        
+            Write_1124_Reg((uint8_t) LIN_COM_REG_2, LIN2_HEADER_TRANS_REQ);
+            break;
+        case LIN_CHAN_3: 
+            Write_1124_Reg((uint8_t) LIN3_BUF_CTRL_REG, write_data);
+            for (i = 0; i < num_of_bytes; i++)
+            {
+              Write_1124_Reg((uint8_t) LIN3_BUF_DAT_REG_1+i , data_frame[i]);
+            }
+            Write_1124_Reg((uint8_t) LIN_COM_REG_2, LIN3_HEADER_TRANS_REQ);
+            break;
+        case LIN_CHAN_4: 
+            Write_1124_Reg((uint8_t) LIN4_BUF_CTRL_REG, write_data);
+            for (i = 0; i < num_of_bytes; i++)
+            {
+              Write_1124_Reg((uint8_t) LIN4_BUF_DAT_REG_1+i , data_frame[i]);
+            }        
+            Write_1124_Reg((uint8_t) LIN_COM_REG_2, LIN4_HEADER_TRANS_REQ);
+            break;
+        default: 
+           // error  
+            break;
+    }
+
+}
+
+//***************************************************************************************
+// Set the checksum, the LIN message response direction (from commander to responder or
+// vice versa) and the data field length (number of data bytes to be transferred).
+// channel_num:  which LIN Channel to configure
+// num_of_byte:  1 to 8 bytes to send/receive minus 1, range 0 to 7
+// chksum_type:  classic or enhanced
+//  Address   LBC       | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3  | Bit 2 | Bit 1 | Bit 0  |
+//   3Bh, 6Bh, 9Bh, CBh | ------ reserved------ |--------DFL ------------|  DIR  |  CCS   |
+//  LIN1_BUF_CTRL = (EightBtyes << 2)  + (DIR_MASTER_TX << 1) + CHK_SUM_CLASSIC =   0b00011111
+
+void LIN_1124_SetMasterTransfer(uint8_t channel_num, uint8_t num_of_bytes, uint8_t chksum_type)
+{
+    uint8_t response;
+    uint8_t write_data;
+    write_data = (num_of_bytes << 2)  + (DIR_MASTER_TX << 1) + chksum_type;
+    switch (channel_num)
+    {
+        case LIN_CHAN_1: 
+            response = Write_Read_1124_Reg((uint8_t) LIN1_BUF_CTRL_REG, write_data);
+            break;
+        case LIN_CHAN_2: 
+            response = Write_Read_1124_Reg((uint8_t) LIN2_BUF_CTRL_REG, write_data);
+            break;
+        case LIN_CHAN_3: 
+            response = Write_Read_1124_Reg((uint8_t) LIN3_BUF_CTRL_REG, write_data);
+            break;
+        case LIN_CHAN_4: 
+            response = Write_Read_1124_Reg((uint8_t) LIN4_BUF_CTRL_REG, write_data);
+            break;
+        default: 
+           // error  
+            break;
+    }
+}
+
+
+
+void LPSPI0_init_master(void)
+{
+	/*!
+	 * LPSPI0 Clocking:
+	 * ===================================================
+	 */
+	PCC->PCCn[PCC_LPSPI0_INDEX] = 0;          		/* Disable clocks to modify PCS ( default) 	*/
+	PCC->PCCn[PCC_LPSPI0_INDEX] = PCC_PCCn_PR_MASK	/* (default) Peripheral is present.			*/
+								 |PCC_PCCn_CGC_MASK	/* Enable PCS=SPLL_DIV2 (40 MHz func'l clock) 	*/
+								 |PCC_PCCn_PCS(6);
+	/*!
+	 * LPSPI0 Initialization:
+	 * ===================================================
+	 */
+  LPSPI0->CR    = 0x00000000;   			/* Disable module for configuration 			*/
+  LPSPI0->IER   = 0x00000000;   			/* Interrupts not used 						*/
+  LPSPI0->DER   = 0x00000000;   			/* DMA not used 								*/
+  LPSPI0->CFGR0 = 0x00000000;   			/* Defaults: 									*/
+                                			/* RDM0=0: rec'd data to FIFO as normal 		*/
+                                			/* CIRFIFO=0; Circular FIFO is disabled 		*/
+                                			/* HRSEL, HRPOL, HREN=0: Host request disabled */
+
+  LPSPI0->CFGR1 = LPSPI_CFGR1_MASTER_MASK;  /* Configurations: master mode									*/
+											/* PCSCFG=0: PCS[3:2] are enabled 								*/
+											/* OUTCFG=0: Output data retains last value when CS negated	*/
+											/* PINCFG=0: SIN is input, SOUT is output 						*/
+											/* MATCFG=0: Match disabled 									*/
+											/* PCSPOL=0: PCS is active low 								*/
+											/* NOSTALL=0: Stall if Tx FIFO empty or Rx FIFO full 			*/
+											/* AUTOPCS=0: does not apply for master mode 					*/
+											/* SAMPLE=0: input data sampled on SCK edge 					*/
+											/* MASTER=1: Master mode 										*/
+
+  LPSPI0->TCR   = LPSPI_TCR_CPHA_MASK
+				  |LPSPI_TCR_PRESCALE(2)
+				  |LPSPI_TCR_PCS(0)         // check on this 0 value .. which pin
+				  |LPSPI_TCR_FRAMESZ(7);   /* Transmit cmd: PCS3, 16 bits, prescale func'l clk by 4, etc	*/
+											/* CPOL=0: SCK inactive state is low 							*/
+											/* CPHA=1: Change data on SCK lead'g, capture on trail'g edge	*/
+											/* PRESCALE=2: Functional clock divided by 2**2 = 4 			*/
+											/* PCS=0: Transfer using PCS0 									*/
+											/* LSBF=0: Data is transfered MSB first 						*/
+											/* BYSW=0: Byte swap disabled 									*/
+											/* CONT, CONTC=0: Continuous transfer disabled 				*/
+											/* RXMSK=0: Normal transfer: rx data stored in rx FIFO 		*/
+											/* TXMSK=0: Normal transfer: data loaded from tx FIFO 			*/
+											/* WIDTH=0: Single bit transfer 								*/
+											/* FRAMESZ=15: # bits in frame = 15+1=16 						*/
+
+  LPSPI0->CCR   = LPSPI_CCR_SCKPCS(4)
+				  |LPSPI_CCR_PCSSCK(4)
+				  |LPSPI_CCR_DBT(8)
+				  |LPSPI_CCR_SCKDIV(8);   	/* Clock dividers based on prescaled func'l clk of 100 nsec 	*/
+											/* SCKPCS=4: SCK to PCS delay = 4+1 = 5 (500 nsec) 			*/
+											/* PCSSCK=4: PCS to SCK delay = 9+1 = 10 (1 usec) 				*/
+											/* DBT=8: Delay between Transfers = 8+2 = 10 (1 usec) 			*/
+											/* SCKDIV=8: SCK divider =8+2 = 10 (1 usec: 1 MHz baud rate) 	*/
+
+  LPSPI0->FCR   = LPSPI_FCR_TXWATER(3);   	/* RXWATER=0: Rx flags set when Rx FIFO >0 	*/
+                                			/* TXWATER=3: Tx flags set when Tx FIFO <= 3 	*/
+
+  LPSPI0->CR    = LPSPI_CR_MEN_MASK
+		  	  	  |LPSPI_CR_DBGEN_MASK;   	/* Enable module for operation 			*/
+											/* DBGEN=1: module enabled in debug mode 	*/
+											/* DOZEN=0: module enabled in Doze mode 	*/
+											/* RST=0: Master logic not reset 			*/
+											/* MEN=1: Module is enabled 				*/
+}
+#define INST_LPSPI_1  0U
+
+uint8_t LPSPI0_transmit_8bits (uint8_t send)
+{
+
+#if 0
+
+   uint8_t response[1];
+   uint8_t data_to_send[1];
+
+   data_to_send[0] = send;
+
+   LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, data_to_send, response, 1, 100000U);
+   return (response[1]);
+
+#endif
+
+#if 1
+
+	__IO uint32_t regdata;
+
+//  while(LPSPI0->SR & LPSPI_SR_MBF_MASK)>>LPSPI_SR_MBF_SHIFT==1);
+
+                                   /* Wait for Tx FIFO available 	*/
+
+  LPSPI0->SR |= LPSPI_SR_TCF_MASK; /* Clear TCF flag 				*/
+  LPSPI0->TDR = send;              /* Transmit data 				*/
+  do {
+      regdata =(LPSPI0->SR & LPSPI_SR_MBF_SHIFT) ;
+//      delay(100);
+     } while ((regdata) == 1);
+
+
+  #endif
+}
+
+uint8_t LPSPI0_receive_8bits (void)
+{
+  uint8_t recieve;
+
+#if 0
+
+  uint8_t response[1];
+  uint8_t data_to_send[1];
+  data_to_send[0] = 0x00;
+
+  LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, data_to_send, response, 1, 100000U);
+  return response[1];                  /* Return received data 			*/
+#endif
+
+ #if 1
+  while((LPSPI0->SR & LPSPI_SR_RDF_MASK)>>LPSPI_SR_RDF_SHIFT==0);
+                                   /* Wait at least one RxFIFO entry 	*/
+  recieve= LPSPI0->RDR;            /* Read received data 				*/
+  LPSPI0->SR |= LPSPI_SR_RDF_MASK; /* Clear RDF flag 					*/
+  return recieve;                  /* Return received data 			    */
+#endif
+}
+
