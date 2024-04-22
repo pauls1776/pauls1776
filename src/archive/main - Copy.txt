@@ -1,0 +1,465 @@
+/*!
+** Copyright 2020 NXP
+** @file main.c
+** @brief
+**         Main module.
+**         This module contains user's application code.
+*/
+/*!
+**  @addtogroup main_module main module documentation
+**  @{
+*/
+/* MODULE main */
+
+
+/* Including necessary configuration files. */
+#include "sdk_project_config.h"
+#include <string.h>
+#include <stdio.h>
+#include "can_pal.h"
+#include "can_pal_mapping.h"
+#include "S32K146.h"
+#include "lan8651_driver.h"
+#include "SJA1124.h"
+#include "pcc_hw_access.h"
+#include "lpspi_hw_access.h"
+#include "clock_S32K1xx.h"
+
+void LIN_1124_TxRxUnconditionalFrameHeader(bool tx_direction, uint8_t channel_num,uint8_t num_of_bytes,  uint8_t chksum_type, uint8_t * data_frame);
+
+volatile int exit_code = 0;
+/* User includes */
+
+can_message_t rxCANMsg, txCANMsg;
+status_t stat;
+can_buff_config_t CANMsgConfig = {false, false, 0u, CAN_MSG_ID_STD, false};
+
+#define RX_MSG_ID 0x100
+#define TX_MAILBOX 0
+#define RX_MAILBOX 1
+
+#define TIMEOUT 100000U
+
+void CAN_ISR_Callback(uint32_t instance,
+        can_event_t eventType,
+        uint32_t objIdx,
+        void *driverState)
+{
+	if(CAN_EVENT_RX_COMPLETE == eventType)
+	{
+		//TP_DriverWriteDataInTP(g_RXCANMsg.id, rxCANMsg.length, CANMsg.data);
+		CAN_Receive(&can_instance1, RX_MAILBOX, &rxCANMsg);
+		PINS_DRV_TogglePins(PTD, 1 << 12); // blue
+		LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)"CAN1\r\n",6);
+	}
+	else if(CAN_EVENT_TX_COMPLETE == eventType)
+	{
+		//TP_DoTxMsgSuccesfulCallback();
+	}
+	else
+	{}
+}
+
+
+
+void SendMsg(const can_instance_t * const instance)
+{
+	uint32_t msgId = 0x101u;
+	uint32_t msgLen = 1u;
+
+
+	stat = CAN_GetTransferStatus(instance, TX_MAILBOX);
+	if(STATUS_SUCCESS == stat)
+	{
+		txCANMsg.id = msgId;
+		txCANMsg.length = (uint8_t)msgLen;
+		stat = CAN_ConfigTxBuff(instance, TX_MAILBOX, &CANMsgConfig);
+
+		stat = CAN_Send(instance, TX_MAILBOX, &txCANMsg);
+	} else {
+		CAN_AbortTransfer(instance, TX_MAILBOX);
+	}
+}
+ 
+
+
+static void BSP_init(void)
+{
+
+	stat = CLOCK_DRV_Init(&clockMan1_InitConfig0);
+
+	stat = PINS_DRV_Init(NUM_OF_CONFIGURED_PINS0, g_pin_mux_InitConfigArr0);
+
+	stat = CAN_Init(&can_instance1, &can_config1);
+	stat = CAN_InstallEventCallback(&can_instance1, &CAN_ISR_Callback, NULL);
+	stat = CAN_Receive(&can_instance1, RX_MAILBOX, &rxCANMsg);
+	stat = CAN_ConfigRxBuff(&can_instance1, RX_MAILBOX, &CANMsgConfig, RX_MSG_ID);
+	stat = CAN_ConfigTxBuff(&can_instance1, TX_MAILBOX, &CANMsgConfig);
+
+	stat = CAN_Init(&can_instance2, &can_config2);
+	stat = CAN_InstallEventCallback(&can_instance2, &CAN_ISR_Callback, NULL);
+	stat = CAN_Receive(&can_instance2, RX_MAILBOX, &rxCANMsg);
+	stat = CAN_ConfigRxBuff(&can_instance2, RX_MAILBOX, &CANMsgConfig, RX_MSG_ID);
+	stat = CAN_ConfigTxBuff(&can_instance2, TX_MAILBOX, &CANMsgConfig);
+
+// ***************************************
+// LP SPI Initialization
+// ***************************************
+
+
+
+	uint32_t regdata;
+	
+	//LPSPI_Init();
+    //LPSPI_ClearStatusFlag(LPSPI0, LPSPI_ALL_STATUS);
+    regdata = (uint32_t) LPSPI0->SR;
+	LPSPI0->SR |= LPSPI_SR_TDF_MASK;          /* Clear TDF flag */
+    regdata = (uint32_t)  LPSPI0->SR; /* Clear TDF flag 				*/
+     LPSPI_DRV_MasterInit(INST_LPSPI_2, &lpspi_2State, &lpspi_1_MasterConfig0);
+
+// ***************************************
+// ***************************************
+// ***************************************
+
+	LPUART_DRV_Init(INST_LPUART_1, &lpUartState0, &lpuart_0_InitConfig0);
+
+	INT_SYS_EnableIRQ(CAN1_ORed_0_15_MB_IRQn);
+	INT_SYS_EnableIRQ(CAN2_ORed_0_15_MB_IRQn);
+
+	INT_SYS_EnableIRQGlobal();
+
+	/* Set information about the data to be sent
+	     *  - Standard message ID
+	     *  - Bit rate switch enabled to use a different bitrate for the data segment
+	     *  - Flexible data rate enabled
+	     *  - Use zeros for FD padding
+	     */
+	    can_buff_config_t buffCfg =  {
+	        .enableFD = true,
+	        .enableBRS = true,
+	        .fdPadding = 0U,
+	        .idType = CAN_MSG_ID_STD,
+	        .isRemote = false
+	    };
+}
+
+/*!
+  \brief The main function for the project.
+  \details The startup initialization sequence is the following:
+ * - startup asm routine
+ * - main()
+*/
+int main(void)
+{
+
+	uint32_t wait, count = 0;
+	uint8_t masterDataSend[10];
+	uint8_t masterDataReceive[10];
+	char uartbuffer[100];
+	unsigned char key, irbuf=0, rbuf[10], reg = 0, rw = 0;
+	status_t stat;
+    uint8_t         counter = 0;
+    NetBuffer       net_buffer;
+    size_t          offset;
+    NetInterface    interface;
+    NetTxAncillary *ancillary;
+    uint8_t *data;
+
+	/* Write your code here */
+
+	BSP_init();
+
+	PINS_DRV_WritePin(PTE, 5, 1); // CAN1_STB
+	PINS_DRV_WritePin(PTE, 3, 1); // CAN2_STB
+
+	PINS_DRV_WritePin(PTA, 9, 1); // nSleep1: Wakeup
+	PINS_DRV_WritePin(PTA, 8, 0); // Brake1
+	PINS_DRV_WritePin(PTE, 0, 0); // Drv1off
+
+	PINS_DRV_WritePin(PTD, 12, 0); // blue off
+
+	sprintf(uartbuffer,"Magna International E/E Architecture - SmartBridge Connect Amplifier board\r\n");
+	LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+//    init_LIN_1124_Transceiver();
+
+    uint8_t channelnum = 0x1, id = 0x1F;
+    set_LIN_1124_ID(channelnum, id);
+
+    uint8_t data_frame[8] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA }; 
+
+    //LIN_1124_TxRxUnconditionalFrameHeader( DIR_MASTER_TX, LIN_CHAN_1 , 8,  HW_CHK_SUM_ENABLE,  data_frame);
+
+
+	offset = (size_t) 0;  // this example buffer data is 168 bytes long - 64 byte chuck size x 3 = 192 - diff is 24
+
+   /* uint8_t buffer_data0[64] =
+    {
+    0x33, 0x33, 0x00, 0x01, 0x00, 0x02, 0x00, 0xfc, 0x70, 0x3d, 0x35, 0x26, 0x86, 0xdd, 0x60, 0x0b, \
+    0x32, 0x54, 0x00, 0x72, 0xAA, 0x01, 0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x9f, \
+    0x9d, 0xa4, 0x5e, 0xf3, 0xcc, 0x5e, 0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x02, 0x22, 0x02, 0x23, 0x00, 0x72, 0x14, 0xd2, 0x01, 0x24};
+
+    uint8_t buffer_data1[64] =
+    {
+    0x72, 0x72, 0x00, 0x08, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x01, 0x00, 0x01, \
+    0x2a, 0x2a, 0x99, 0x94, 0x08, 0x92, 0x04, 0x6e, 0xa3, 0x99, 0x00, 0x03, 0x00, 0x0c, 0x34, 0x00, \
+    0xfc, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x27, 0x00, 0x1c, 0x00, 0x0c, \
+    0x54, 0x52, 0x59, 0x4e, 0x42, 0x4a, 0x44, 0x44, 0x47, 0x4e, 0x4e, 0x33, 0x05, 0x6d, 0x61, 0x67};
+
+    uint8_t buffer_data2[64] = {
+    0x6e, 0x61, 0x06, 0x67, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x00, 0x00, 0x10, 0x00, 0x0e, 0x00, 0x00, \
+    0x01, 0x37, 0x00, 0x08, 0x4d, 0x53, 0x46, 0x54, 0x20, 0x35, 0x2e, 0x30, 0x00, 0x06, 0x00, 0x08, \
+    0x00, 0x11, 0x00, 0x17, 0x00, 0x18, 0x00, 0x27 };
+
+    net_buffer.chunkCount = (uint_t) 3;
+    net_buffer.maxChunkCount = (uint_t) 1;
+    net_buffer.chunk[0].address = buffer_data0;
+    net_buffer.chunk[0].length = (uint16_t) 64;
+    net_buffer.chunk[0].size = (uint16_t) 64;
+    net_buffer.chunk[1].address = buffer_data1;
+    net_buffer.chunk[1].length = (uint16_t) 64;
+    net_buffer.chunk[1].size = (uint16_t) 64;
+    net_buffer.chunk[2].address = buffer_data2;
+    net_buffer.chunk[2].length = (uint16_t) 40;
+    net_buffer.chunk[2].size = (uint16_t) 40;
+
+
+
+    uint8_t buffer_data1[64] =
+  {0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, \
+    0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, \
+    0x36, 0x37};
+    */
+
+
+#if 0
+    uint8_t buffer_data0[64] =
+    { 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, \
+    0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, \
+    0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, \
+    0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00};
+
+    net_buffer.chunkCount       =  (uint_t) 2;
+    net_buffer.maxChunkCount    =  (uint_t) 2;
+    net_buffer.chunk[0].address =  buffer_data0;
+    net_buffer.chunk[0].length  =  (uint16_t) 64;
+    net_buffer.chunk[0].size    =  (uint16_t) 64;
+
+    uint8_t buffer_data1[64] = {0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00, 0xAA, 0x00 };
+
+    net_buffer.chunk[1].address =  buffer_data1;
+    net_buffer.chunk[1].length =  (uint16_t) 10;
+    net_buffer.chunk[1].size =    (uint16_t) 10;
+
+#else
+    uint8_t buffer_data0[64] =
+	{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xAA, 0xfc, 0x70, 0x3d, 0x35, 0x26, 0x08, 0x06, 0x00, 0x01,\
+    0x08, 0x00, 0x06, 0x04, 0x00, 0x01, 0xAA, 0xfc, 0x70, 0x3d, 0x35, 0x26, 0xa9, 0xfe, 0xcb, 0xab,\
+	0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,  0xa9, 0xfe, 0xa9, 0xfe  };
+
+    net_buffer.chunkCount       =  (uint_t) 1;
+    net_buffer.maxChunkCount    =  (uint_t) 1;
+    net_buffer.chunk[0].address =  buffer_data0;
+    net_buffer.chunk[0].length  =  (uint16_t) 42;
+    net_buffer.chunk[0].size    =  (uint16_t) 42;
+
+//   uint8_t buffer_data0[64] =
+//   {0x10, 0xa5, 0x1d, 0x2e, 0x41, 0xc7, 0x6c, 0x29, 0xd2, 0xb0, 0x16, 0x64, 0x08, 0x00, 0x45, 0x00,\
+//    0x00, 0x54, 0x98, 0x1c, 0x40, 0x00, 0x3f, 0x01, 0x29, 0xa7, 0x0a, 0x40, 0x3c, 0x6a, 0x0a, 0x40, \
+//    0x28, 0xfc, 0x08, 0x00, 0xe5, 0xfb, 0x00, 0x0f, 0x00, 0x1d, 0xa5, 0x0e, 0xcd, 0x65, 0x00, 0x00, \
+//    0x00, 0x00, 0xd9, 0x90, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15};
+//   uint8_t buffer_data1[64] = {0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
+
+ #endif
+
+
+
+
+
+
+
+    /*
+	   {0x6c, 0x29, 0xd2, 0xb0, 0x16, 0x64, 0x10, 0xa5, 0x1d, 0x2e, 0x41, 0xc7, 0x08, 0x00, 0x45, 0x00, \
+	0x00, 0x3c, 0x41, 0xb8, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x0a, 0x40, 0x28, 0xfc, 0x0a, 0x40,	\
+	0x28, 0x64, 0x08, 0x00, 0x48, 0x94, 0x00, 0x01, 0x04, 0xc7, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, \
+	0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76};
+
+
+    uint8_t buffer_data1[64] =
+    {
+    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, \
+	0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, \
+	0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, \
+	0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
+
+    uint8_t buffer_data2[64] = {
+    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, \
+	0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, \
+	0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
+
+    */
+
+  //  ancillary->srcMacAddr = LLDP_MULTICAST_ADDR;
+  //  ancillary.destMacAddr = LLDP_MULTICAST_ADDR;
+
+    //interface->nicDriver = &lan8651Driver;
+    interface.spiDriver = &spiDriver;
+    lan8651Init(&interface);
+
+
+
+   // lan8651SendPacket(&interface,  &net_buffer, offset, ancillary);
+/*
+    for(;;)
+    {
+  	masterDataSend[1] = (reg << 1) | rw;
+	masterDataSend[0] = 7;  // 0b111 = normal mode
+	masterDataSend[3] = 7;
+	masterDataSend[2] = 0;
+	LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, (uint8_t*)&masterDataSend, (uint8_t*)&masterDataReceive, 4, TIMEOUT);
+	sprintf(uartbuffer,"Response: %02X %02X %02X %02X\r\n", masterDataReceive[0]<<1,
+			masterDataReceive[1]<<1 , masterDataReceive[2], masterDataReceive[3]);
+	LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+    }
+
+*/
+    for(;;)
+    {
+    	for (wait=0;wait<100000;wait++)
+    	{ }
+
+    	SendMsg(&can_instance1);
+    	SendMsg(&can_instance2);
+		
+       lan8651SendPacket(&interface,  &net_buffer, offset, ancillary);
+    	error_t error;
+ 	   error = lan8651ReceivePacket(&interface);
+ 	    if (error)
+			LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+
+    	//while(CAN_GetTransferStatus(&can_instance1, RX_MAILBOX) == STATUS_BUSY);
+    	if (CAN_Receive(&can_instance1, RX_MAILBOX, &rxCANMsg) == STATUS_SUCCESS) {
+    	        	PINS_DRV_TogglePins(PTD, 1 << 12); // blue
+    	        	//CAN_AbortTransfer(&can_instance1, RX_MAILBOX);
+    	    	}
+    	if (CAN_Receive(&can_instance2, RX_MAILBOX, &rxCANMsg) == STATUS_SUCCESS) {
+    	        	PINS_DRV_TogglePins(PTD, 1 << 12); // blue
+    	        	//CAN_AbortTransfer(&can_instance1, RX_MAILBOX);
+    	    	}
+
+    	PINS_DRV_WritePin(PTD, 11, count & 1);  // green
+
+    	stat = LPUART_DRV_ReceiveData(INST_LPUART_1, &key, 1);
+
+    	if (stat == STATUS_SUCCESS) {
+    		rbuf[irbuf]=key;
+        	if (irbuf<9) irbuf++;
+        	switch  (key) {
+        	case ' ':
+        		sprintf(uartbuffer,"SPACE\r\n");
+				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+				break;
+        	case 'c':
+        		txCANMsg.id = 0x100;
+        		txCANMsg.length = 1;
+        		txCANMsg.data[0] = 0xAA;
+        		stat = CAN_ConfigTxBuff(&can_instance1, TX_MAILBOX, &CANMsgConfig);
+				stat = CAN_Send(&can_instance1, TX_MAILBOX, &txCANMsg);
+        		stat = CAN_ConfigTxBuff(&can_instance2, TX_MAILBOX, &CANMsgConfig);
+				stat = CAN_Send(&can_instance2, TX_MAILBOX, &txCANMsg);
+				break;
+        	case 'i':
+        		rw = 1; // read
+        		reg = 0x7E;
+        		masterDataSend[1] = (reg << 1) | rw;
+				masterDataSend[0] = 0;
+				masterDataSend[3] = 0;
+				masterDataSend[2] = 0;
+		//		LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, (uint8_t*)&masterDataSend, (uint8_t*)&masterDataReceive, 4, TIMEOUT);
+				sprintf(uartbuffer,"Response: %02X %02X %02X %02X\r\n", masterDataReceive[0]<<1,
+						masterDataReceive[1]<<1 , masterDataReceive[2], masterDataReceive[3]);
+				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+				break;
+        	case 'w':
+        		rw = 0; // write
+				reg = 0x01;
+				masterDataSend[1] = (reg << 1) | rw;
+				masterDataSend[0] = 7;  // 0b111 = normal mode
+				masterDataSend[3] = 7;
+				masterDataSend[2] = 0;
+				LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, (uint8_t*)&masterDataSend, (uint8_t*)&masterDataReceive, 4, TIMEOUT);
+				sprintf(uartbuffer,"Response: %02X %02X %02X %02X\r\n", masterDataReceive[0]<<1,
+						masterDataReceive[1]<<1 , masterDataReceive[2], masterDataReceive[3]);
+				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+				break;
+        	case 's':
+        		rw = 0; // write
+				reg = 0x01;
+				masterDataSend[1] = (reg << 1) | rw;
+				masterDataSend[0] = 1;  // 0b001 = sleep mode
+				masterDataSend[3] = 1;
+				masterDataSend[2] = 0;
+				LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_1, (uint8_t*)&masterDataSend, (uint8_t*)&masterDataReceive, 4, TIMEOUT);
+				sprintf(uartbuffer,"Response: %02X %02X %02X %02X\r\n", masterDataReceive[0]<<1,
+						masterDataReceive[1]<<1 , masterDataReceive[2], masterDataReceive[3]);
+				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+				break;
+        	}
+    		//PINS_DRV_WritePin(PTD, 12, key & 1);   // blue LED
+    		/*
+    		if (key == 'w') {irbuf = 0;rw = 1;rbuf[0] = 0;}
+    		if (irbuf==2) {
+    			if (rbuf[0]>='A') reg = (rbuf[0] & 0x4F) - 'A' + 10;
+    			else if (rbuf[0]>='0') reg = rbuf[0] - '0';
+    			reg *= 0x10;
+    			if (rbuf[1]>='A') reg += (rbuf[1] & 0x4F) - 'A' + 10;
+    			else if (rbuf[1]>='0') reg += rbuf[1] - '0';
+
+    			masterDataSend[0] = (uint16_t)reg << 8;  // read register
+    			if (rw==0) {
+    				masterDataSend[0] |= 0x4000;
+        			masterDataSend[1] = masterDataSend[0];
+					stat = LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_3, &masterDataSend, &masterDataReceive, 2, TIMEOUT);
+					sprintf(uartbuffer,"Reg 0x%02X = %04X \r\n",
+							reg,masterDataReceive[0]);
+					LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+					irbuf = 0;
+    			} else {
+    				sprintf(uartbuffer,"Reg 0x%02X = ",reg);
+    				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+    			}
+    		}
+    		if (irbuf==4) {
+    			if (rbuf[2]>='A') reg = (rbuf[2] & 0x4F) - 'A' + 10;
+				else if (rbuf[2]>='0') reg = rbuf[2] - '0';
+				reg *= 0x10;
+				if (rbuf[3]>='A') reg += (rbuf[3] & 0x4F) - 'A' + 10;
+				else if (rbuf[3]>='0') reg += rbuf[3] - '0';
+
+				masterDataSend[0] |= reg;  // write register data
+
+				LPSPI_DRV_MasterTransferBlocking(INST_LPSPI_3, &masterDataSend, &masterDataReceive, 2, TIMEOUT);
+				sprintf(uartbuffer,"%04X \r\n",
+						masterDataReceive[0]);
+				LPUART_DRV_SendData(INST_LPUART_1, (uint8_t*)uartbuffer, strlen(uartbuffer));
+				irbuf = 0;
+				rw = 0;
+    		}
+    		*/
+        	if (key==13) irbuf = 0;
+    	}
+
+        if(exit_code != 0)
+        {
+            break;
+        }
+        count++;
+        if (count>0x2F) count = 0;
+    }
+    return exit_code;
+}
+
+/* END main */
+/*!
+** @}
+*/

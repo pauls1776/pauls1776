@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "lan8651_driver.h": "c",
+        "error.h": "c",
+        "device_registers.h": "c",
+        "s32k146.h": "c",
+        "stdbool.h": "c",
+        "sdk_project_config.h": "c",
+        "lpspi_hw_access.h": "c",
+        "peripherals_lpspi_1.h": "c",
+        "lpspi_master_driver.h": "c",
+        "lpspi_shared_function.h": "c",
+        "stub.h": "c",
+        "pcc_hw_access.h": "c",
+        "clock_s32k1xx.h": "c",
+        "stdtypes.h": "c",
+        "lpspi_slave_driver.h": "c"
+    }
+}
