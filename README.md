@@ -1,10 +1,6 @@
-- 👋 Hi, I’m @pauls1776
-- 👀 I’m interested in ...
-- 🌱 I’m currently learning ...
-- 💞️ I’m looking to collaborate on ...
-- 📫 How to reach me ...
+# E/E Architecture Amplifier Board
 
-<!---
-pauls1776/pauls1776 is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
-You can click the Preview link to take a look at your changes.
---->
+Basic SDK project for NXP S32K146 in DesignStudio with SDK 4.3
+
+---
+Edzko.Smid@magna.com
